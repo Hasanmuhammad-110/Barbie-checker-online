@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barbie Checkers Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Barbie Checkers Game 👑</h1>
+    
+    <div id="roomSection">
+        <button id="hostBtn">Host Game</button>
+        <input type="text" id="roomIdInput" placeholder="Enter Room ID">
+        <button id="joinBtn">Join Game</button>
+        <button id="resetBtn">Reset Board</button>
+    </div>
+    
+    <div id="turn">Turn: <span id="turnColor">Red Player</span></div>
+    <div id="board"></div>
+    <div id="roomInfo"></div>
+    <div id="footerNote">Play with a friend online! 👭</div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
