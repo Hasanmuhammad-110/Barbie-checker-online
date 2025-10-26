@@ -1,29 +1,264 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ur">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barbie Checkers Game</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Barbie Checker Online</title>
+<style>
+  :root{--pink:#ff2fa3;--light:#ffe6f5}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,var(--light),#ffd6f6);display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:16px}
+  h1{color:var(--pink);margin:18px 0;text-shadow:1px 1px 2px #fff}
+  #roomSection{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:8px}
+  input{padding:8px;border-radius:6px;border:1px solid rgba(0,0,0,0.1)}
+  button{background:var(--pink);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.08)}
+  #turn{margin:8px;font-weight:600}
+  #board{display:grid;grid-template-columns:repeat(8,48px);grid-template-rows:repeat(8,48px);gap:0;border-radius:10px;border:4px solid var(--pink);box-shadow:0 8px 30px rgba(255,111,207,0.18);width:fit-content;background:#fff;padding:6px}
+  .cell{width:48px;height:48px;box-sizing:border-box}
+  .dark{background:#000}
+  .light{background:#fff}
+  .piece{width:36px;height:36px;border-radius:50%;margin:6px auto;cursor:pointer;box-shadow:0 0 6px rgba(255,255,255,0.6)}
+  .whitePiece{background:#ffffff;border:2px solid #ddd}
+  .blackPiece{background:#111}
+  .selected{outline:3px solid #fffa65;transform:scale(1.03)}
+  #roomInfo{color:#4d004d;margin-top:8px}
+  #footerNote{font-size:12px;color:#6b0060;margin-top:10px}
+  @media(max-width:420px){#board{transform:scale(0.86);transform-origin:top center}}
+</style>
 </head>
 <body>
-    <h1>Barbie Checkers Game 👑</h1>
-    
-    <div id="roomSection">
-        <button id="hostBtn">Host Game</button>
-        <input type="text" id="roomIdInput" placeholder="Enter Room ID">
-        <button id="joinBtn">Join Game</button>
-        <button id="resetBtn">Reset Board</button>
-    </div>
-    
-    <div id="turn">Turn: <span id="turnColor">Red Player</span></div>
-    <div id="board"></div>
-    <div id="roomInfo"></div>
-    <div id="footerNote">Play with a friend online! 👭</div>
+  <h1>Barbie Checker Online</h1>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="script.js"></script>
+  <div id="roomSection">
+    <button id="playOnlineBtn">Play Online</button>
+    <button id="inviteBtn">Invite a Friend</button>
+    <input id="codeInput" placeholder="Enter room code (e.g. 8732)" />
+    <button id="joinBtn">Join by Code</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div id="turn">Current Turn: <b id="turnColor" style="color:#ff2a8a">White (Player1)</b></div>
+  <div id="roomInfo"></div>
+
+  <div id="board" aria-label="Checker board"></div>
+
+  <p id="footerNote">Note: For first-time testing set Firebase Realtime DB rules to test mode. After testing we'll secure it.</p>
+
+  <!-- Firebase compat SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <script>
+  // ---------- Firebase config: replace only if yours is different ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyApUlRA73t4YzntbsAs05njdOuOrllX92Q",
+    authDomain: "barbie-doll-game-759cc.firebaseapp.com",
+    databaseURL: "https://barbie-doll-game-759cc-default-rtdb.firebaseio.com",
+    projectId: "barbie-doll-game-759cc",
+    storageBucket: "barbie-doll-game-759cc.firebasestorage.app",
+    messagingSenderId: "550459181007",
+    appId: "1:550459181007:web:271589827bd734ba11b4ba",
+    measurementId: "G-8931YWS3ZF"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ---------- DOM ----------
+  const board = document.getElementById('board');
+  const playOnlineBtn = document.getElementById('playOnlineBtn');
+  const inviteBtn = document.getElementById('inviteBtn');
+  const joinBtn = document.getElementById('joinBtn');
+  const codeInput = document.getElementById('codeInput');
+  const roomInfo = document.getElementById('roomInfo');
+  const resetBtn = document.getElementById('resetBtn');
+  const turnColor = document.getElementById('turnColor');
+
+  // ---------- State ----------
+  // Host = Player1 = WHITE
+  // Joiner = Player2 = BLACK
+  let roomId = null;
+  let myColor = null; // 'white' or 'black'
+  let currentTurn = 'white'; // white starts
+  let selectedIndex = null;
+  let state = []; // 64 cells: 'white' | 'black' | null
+
+  // ---------- Helpers ----------
+  function randCode() { return Math.floor(1000 + Math.random() * 9000).toString(); }
+  function idxToRC(i){ return [Math.floor(i/8), i%8]; }
+  function rcToIdx(r,c){ return r*8 + c; }
+  function updateTurnUI(){ turnColor.textContent = currentTurn === 'white' ? 'White (Player1)' : 'Black (Player2)'; turnColor.style.color = currentTurn === 'white' ? '#000' : '#111'; }
+
+  function initialState(){
+    const s = new Array(64).fill(null);
+    for(let i=0;i<64;i++){
+      const [r,c] = idxToRC(i);
+      const isDark = (r + c) % 2 === 1;
+      if(isDark && r < 3) s[i] = 'black';   // top rows = black pieces (Player2 starting area)
+      if(isDark && r > 4) s[i] = 'white';   // bottom rows = white pieces (Player1 starting area)
+    }
+    return s;
+  }
+
+  // ---------- Render ----------
+  function render(){
+    board.innerHTML = '';
+    for(let i=0;i<64;i++){
+      const cell = document.createElement('div');
+      cell.className = 'cell ' + ( ((Math.floor(i/8) + (i%8))%2===1) ? 'dark' : 'light' );
+      cell.dataset.index = i;
+      if(state[i]){
+        const p = document.createElement('div');
+        p.className = 'piece ' + (state[i] === 'white' ? 'whitePiece' : 'blackPiece');
+        p.dataset.color = state[i];
+        cell.appendChild(p);
+      }
+      cell.addEventListener('click', onCellClick);
+      board.appendChild(cell);
+    }
+  }
+
+  // ---------- Move Logic ----------
+  function onCellClick(e){
+    const cell = e.currentTarget;
+    const idx = Number(cell.dataset.index);
+
+    // selecting a piece
+    if(cell.firstChild && cell.firstChild.classList.contains('piece')){
+      const color = cell.firstChild.dataset.color;
+      if(!roomId) return alert('پہلے Play Online یا Join by Code کریں۔');
+      if(color !== myColor) return; // can only select own pieces
+      if(color !== currentTurn) return; // only on your turn
+      clearSelected();
+      cell.firstChild.classList.add('selected');
+      selectedIndex = idx;
+      return;
+    }
+
+    // moving
+    if(selectedIndex === null) return;
+    // only dark squares
+    const [tr,tc] = idxToRC(idx);
+    if((tr+tc)%2 === 0) return;
+    const [fr,fc] = idxToRC(selectedIndex);
+    const pieceColor = state[selectedIndex];
+    const dir = pieceColor === 'white' ? -1 : 1; // white moves up (-1 row), black moves down (+1 row)
+    const dRow = Math.floor(idx/8) - Math.floor(selectedIndex/8);
+    const dCol = Math.abs((idx%8) - (selectedIndex%8));
+
+    // normal move
+    if(dRow === dir && dCol === 1 && state[idx] === null){
+      state[idx] = state[selectedIndex];
+      state[selectedIndex] = null;
+      finishMove();
+      return;
+    }
+    // capture move
+    if(dRow === dir*2 && dCol === 2){
+      const midR = (fr + tr)/2, midC = (fc + tc)/2;
+      const midIdx = rcToIdx(midR, midC);
+      if(state[midIdx] && state[midIdx] !== state[selectedIndex]){
+        state[idx] = state[selectedIndex];
+        state[selectedIndex] = null;
+        state[midIdx] = null;
+        finishMove();
+        return;
+      }
+    }
+    // otherwise invalid
+  }
+
+  function clearSelected(){
+    const prev = document.querySelector('.selected');
+    if(prev) prev.classList.remove('selected');
+    selectedIndex = null;
+  }
+
+  function finishMove(){
+    clearSelected();
+    currentTurn = currentTurn === 'white' ? 'black' : 'white';
+    updateTurnUI();
+    render();
+    saveToFirebase();
+  }
+
+  // ---------- Firebase sync ----------
+  function saveToFirebase(){
+    if(!roomId) return;
+    const payload = { state, turn: currentTurn, updated: Date.now() };
+    firebase.database().ref('rooms/' + roomId).set(payload);
+  }
+
+  function listenRoom(){
+    if(!roomId) return;
+    firebase.database().ref('rooms/' + roomId).on('value', snap => {
+      const d = snap.val();
+      if(!d) return;
+      // update local state if data exists
+      state = d.state || initialState();
+      currentTurn = d.turn || 'white';
+      updateTurnUI();
+      render();
+    });
+  }
+
+  // ---------- Button actions ----------
+  playOnlineBtn.addEventListener('click', ()=>{
+    roomId = randCode();
+    myColor = 'white'; // host is white (Player1)
+    state = initialState();
+    currentTurn = 'white';
+    roomInfo.innerHTML = `🎮 Room created: <b>${roomId}</b> — Share this code with friend`;
+    render(); updateTurnUI();
+    saveToFirebase();
+    listenRoom();
+  });
+
+  inviteBtn.addEventListener('click', ()=>{
+    if(!roomId) { alert('پہلے Play Online کریں تاکہ Room بن سکے'); return; }
+    const shareText = `Join my Barbie Checker game. Room code: ${roomId}`;
+    // try navigator.share for mobile share
+    if(navigator.share){
+      navigator.share({ title: 'Barbie Checker', text: shareText, url: location.href + '?room=' + roomId }).catch(()=>{});
+    } else {
+      prompt('Copy and send this code to friend:', roomId);
+    }
+  });
+
+  joinBtn.addEventListener('click', ()=>{
+    const code = (codeInput.value || '').trim();
+    if(!code) return alert('Room code ڈالیں');
+    roomId = code;
+    myColor = 'black'; // joiner is black (Player2)
+    // fetch existing room
+    firebase.database().ref('rooms/' + roomId).get().then(snap=>{
+      if(!snap.exists()){ alert('Room not found'); return; }
+      const d = snap.val();
+      state = d.state || initialState();
+      currentTurn = d.turn || 'white';
+      roomInfo.innerHTML = `✅ Joined Room: <b>${roomId}</b> — You are Black`;
+      render(); updateTurnUI();
+      listenRoom();
+    }).catch(err=>{ alert('Network error'); console.error(err); });
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    if(!roomId) return alert('پہلے Play Online یا Join کریں');
+    state = initialState();
+    currentTurn = 'white';
+    render(); updateTurnUI();
+    saveToFirebase();
+  });
+
+  // ---------- Auto-join if room code present in URL ----------
+  (function autoJoinFromURL(){
+    const params = new URLSearchParams(location.search);
+    const r = params.get('room');
+    if(r){ codeInput.value = r; }
+  })();
+
+  // ---------- Init ----------
+  state = initialState();
+  render();
+  updateTurnUI();
+  </script>
 </body>
 </html>
